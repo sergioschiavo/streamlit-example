@@ -5,7 +5,7 @@ import json
 import pyaudio
 
 # OpenAI API details
-API_TOKEN = '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'
+API_TOKEN = ["KEY", "Python"]
 ASR_MODEL_ID = 'whisper-english-6'
 
 # Audio settings
