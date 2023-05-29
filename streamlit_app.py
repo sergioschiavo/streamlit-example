@@ -1,38 +1,87 @@
-from collections import namedtuple
-import altair as alt
-import math
-import pandas as pd
-import streamlit as st
+import websocket
+import threading
+import time
+import json
+import pyaudio
 
-"""
-# Welcome to Streamlit!
+# OpenAI API details
+API_TOKEN = 'YOUR_API_TOKEN'
+ASR_MODEL_ID = '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'
 
-Edit `/streamlit_app.py` to customize this app to your heart's desire :heart:
+# Audio settings
+AUDIO_CHUNK_SIZE = 2048
+AUDIO_FORMAT = pyaudio.paInt16
+AUDIO_CHANNELS = 1
+AUDIO_RATE = 16000
 
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
+# WebSocket connection
+ws = None
 
-In the meantime, below is an example of what you can do with just a few lines of code:
-"""
+# Callback for handling audio stream
+def audio_callback(in_data, frame_count, time_info, status):
+    ws.send_binary(in_data)
+    return (None, pyaudio.paContinue)
 
+# WebSocket connection established
+def on_open(ws):
+    print('Connected to the server.')
 
-with st.echo(code_location='below'):
-    total_points = st.slider("Number of points in spiral", 1, 5000, 2000)
-    num_turns = st.slider("Number of turns in spiral", 1, 100, 9)
+    # Start audio stream
+    p = pyaudio.PyAudio()
+    stream = p.open(format=AUDIO_FORMAT,
+                    channels=AUDIO_CHANNELS,
+                    rate=AUDIO_RATE,
+                    input=True,
+                    frames_per_buffer=AUDIO_CHUNK_SIZE,
+                    stream_callback=audio_callback)
 
-    Point = namedtuple('Point', 'x y')
-    data = []
+    stream.start_stream()
 
-    points_per_turn = total_points / num_turns
+    # Keep the connection alive
+    while True:
+        time.sleep(1)
 
-    for curr_point_num in range(total_points):
-        curr_turn, i = divmod(curr_point_num, points_per_turn)
-        angle = (curr_turn + 1) * 2 * math.pi * i / points_per_turn
-        radius = curr_point_num / total_points
-        x = radius * math.cos(angle)
-        y = radius * math.sin(angle)
-        data.append(Point(x, y))
+# WebSocket message received
+def on_message(ws, message):
+    response = json.loads(message)
 
-    st.altair_chart(alt.Chart(pd.DataFrame(data), height=500, width=500)
-        .mark_circle(color='#0068c9', opacity=0.5)
-        .encode(x='x:Q', y='y:Q'))
+    if 'text' in response['partial']:
+        print('Partial:', response['partial']['text'])
+
+    if 'text' in response['final']:
+        print('Final:', response['final']['text'])
+
+# WebSocket connection closed
+def on_close(ws):
+    print('Connection closed.')
+
+# Start the WebSocket connection
+def start_ws_connection():
+    global ws
+
+    # Initialize WebSocket connection
+    ws = websocket.WebSocketApp('wss://api.openai.com/v1/asr/stream',
+                                header={'Authorization': f'Bearer {API_TOKEN}'},
+                                on_open=on_open,
+                                on_message=on_message,
+                                on_close=on_close)
+
+    ws.run_forever()
+
+# Start the speech-to-text process
+def start_speech_to_text():
+    threading.Thread(target=start_ws_connection).start()
+
+# Main function
+def main():
+    print('Speech-to-Text using Whisper ASR')
+
+    # Start the speech-to-text process
+    start_speech_to_text()
+
+    # Wait for the process to complete
+    while True:
+        time.sleep(1)
+
+if __name__ == '__main__':
+    main()
