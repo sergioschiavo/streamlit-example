@@ -16,7 +16,7 @@ URL = 'http://stream.live.vc.bbcmedia.co.uk/bbc_radio_fourlw_online_nonuk'
 
 async def main():
   # Initialize the Deepgram SDK
-  deepgram = Deepgram(DEEPGRAM_API_KEY)
+  deepgram = Deepgram(57e405287ee63278ec654c27d3449afc60275aa7)
 
   # Create a websocket connection to Deepgram
   # In this example, punctuation is turned on, interim results are turned off, and language is set to UK English.
