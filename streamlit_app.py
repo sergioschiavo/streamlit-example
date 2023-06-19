@@ -5,7 +5,7 @@ import asyncio
 import aiohttp
 
 # Your Deepgram API Key
-DEEPGRAM_API_KEY = 'YOUR_DEEPGRAM_API_KEY'
+DEEPGRAM_API_KEY = '57e405287ee63278ec654c27d3449afc60275aa7'
 
 # URL for the realtime streaming audio you would like to transcribe
 # The URL for the sample resource changes depending on whether the user is outside or inside the UK
