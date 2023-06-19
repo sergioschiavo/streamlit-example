@@ -1,87 +1,56 @@
-import websocket
-import threading
-import time
-import json
-import pyaudio
+ # Example filename: deepgram_test.py
 
-# OpenAI API details
-API_TOKEN = ["KEY", "Python"]
-ASR_MODEL_ID = 'whisper-english-6'
+from deepgram import Deepgram
+import asyncio
+import aiohttp
 
-# Audio settings
-AUDIO_CHUNK_SIZE = 2048
-AUDIO_FORMAT = pyaudio.paInt16
-AUDIO_CHANNELS = 1
-AUDIO_RATE = 16000
+# Your Deepgram API Key
+DEEPGRAM_API_KEY = 'YOUR_DEEPGRAM_API_KEY'
 
-# WebSocket connection
-ws = None
+# URL for the realtime streaming audio you would like to transcribe
+# The URL for the sample resource changes depending on whether the user is outside or inside the UK
+# Outside the UK
+URL = 'http://stream.live.vc.bbcmedia.co.uk/bbc_radio_fourlw_online_nonuk'
+# Inside the UK
+# URL = 'http://stream.live.vc.bbcmedia.co.uk/bbc_radio_fourfm'
 
-# Callback for handling audio stream
-def audio_callback(in_data, frame_count, time_info, status):
-    ws.send_binary(in_data)
-    return (None, pyaudio.paContinue)
+async def main():
+  # Initialize the Deepgram SDK
+  deepgram = Deepgram(DEEPGRAM_API_KEY)
 
-# WebSocket connection established
-def on_open(ws):
-    print('Connected to the server.')
+  # Create a websocket connection to Deepgram
+  # In this example, punctuation is turned on, interim results are turned off, and language is set to UK English.
+  try:
+    deepgramLive = await deepgram.transcription.live({
+      'smart_format': True,
+      'interim_results': False,
+      'language': 'en-US',
+      'model': 'nova',
+    })
+  except Exception as e:
+    print(f'Could not open socket: {e}')
+    return
 
-    # Start audio stream
-    p = pyaudio.PyAudio()
-    stream = p.open(format=AUDIO_FORMAT,
-                    channels=AUDIO_CHANNELS,
-                    rate=AUDIO_RATE,
-                    input=True,
-                    frames_per_buffer=AUDIO_CHUNK_SIZE,
-                    stream_callback=audio_callback)
+  # Listen for the connection to close
+  deepgramLive.registerHandler(deepgramLive.event.CLOSE, lambda c: print(f'Connection closed with code {c}.'))
 
-    stream.start_stream()
+  # Listen for any transcripts received from Deepgram and write them to the console
+  deepgramLive.registerHandler(deepgramLive.event.TRANSCRIPT_RECEIVED, print)
 
-    # Keep the connection alive
-    while True:
-        time.sleep(1)
+  # Listen for the connection to open and send streaming audio from the URL to Deepgram
+  async with aiohttp.ClientSession() as session:
+    async with session.get(URL) as audio:
+      while True:
+        data = await audio.content.readany()
+        deepgramLive.send(data)
 
-# WebSocket message received
-def on_message(ws, message):
-    response = json.loads(message)
+        # If no data is being sent from the live stream, then break out of the loop.
+        if not data:
+            break
 
-    if 'text' in response['partial']:
-        print('Partial:', response['partial']['text'])
+  # Indicate that we've finished sending data by sending the customary zero-byte message to the Deepgram streaming endpoint, and wait until we get back the final summary metadata object
+  await deepgramLive.finish()
 
-    if 'text' in response['final']:
-        print('Final:', response['final']['text'])
-
-# WebSocket connection closed
-def on_close(ws):
-    print('Connection closed.')
-
-# Start the WebSocket connection
-def start_ws_connection():
-    global ws
-
-    # Initialize WebSocket connection
-    ws = websocket.WebSocketApp('wss://api.openai.com/v1/asr/stream',
-                                header={'Authorization': f'Bearer {API_TOKEN}'},
-                                on_open=on_open,
-                                on_message=on_message,
-                                on_close=on_close)
-
-    ws.run_forever()
-
-# Start the speech-to-text process
-def start_speech_to_text():
-    threading.Thread(target=start_ws_connection).start()
-
-# Main function
-def main():
-    print('Speech-to-Text using Whisper ASR')
-
-    # Start the speech-to-text process
-    start_speech_to_text()
-
-    # Wait for the process to complete
-    while True:
-        time.sleep(1)
-
-if __name__ == '__main__':
-    main()
+# If running in a Jupyter notebook, Jupyter is already running an event loop, so run main with this line instead:
+#await main()
+asyncio.run(main())
